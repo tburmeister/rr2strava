@@ -32,17 +32,21 @@ def get_month(date):
 
 def get_all():
     executor = ThreadPoolExecutor()
+    futures = []
     curr = datetime.strptime(START, '%Y-%m-%d')
     end = datetime.strptime(END, '%Y-%m-%d')
 
     while curr < end:
-        executor.submit(get_month, curr.strftime('%Y-%m-%d'))
+        futures.append(executor.submit(get_month, curr.strftime('%Y-%m-%d')))
         if curr.month == 12:
             curr = datetime(year=curr.year + 1, month=1, day=1)
         else:
             curr = datetime(year=curr.year, month=curr.month + 1, day=1)
 
     executor.shutdown(wait=True)
+
+    for future in futures:
+        future.result()
 
 
 if __name__ == '__main__':

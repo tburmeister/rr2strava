@@ -22,7 +22,9 @@ class LogParser(HTMLParser):
 
     def __init__(self, date):
         super().__init__()
+        self.in_a = False
         self.date = date
+        self.day = 1
         self.out = []
         self.errors = []
         self.idx = 0
@@ -31,6 +33,10 @@ class LogParser(HTMLParser):
         return json.dumps(self.out, indent=4)
 
     def handle_starttag(self, tag, attrs):
+        if tag == 'a':
+            self.in_a = True
+            return
+
         if tag != 'span':
             return
 
@@ -47,7 +53,8 @@ class LogParser(HTMLParser):
                     'title': m.group(1),
                     'miles': float(m.group(2)),
                     'minutes': int(m.group(3)),
-                    'entry': clean_entry(m.group(4))
+                    'entry': clean_entry(m.group(4)),
+                    'day': self.day
                 })
                 continue
 
@@ -58,12 +65,24 @@ class LogParser(HTMLParser):
                     'title': m.group(1),
                     'miles': float(m.group(2)),
                     'minutes': 0,
-                    'entry': clean_entry(m.group(3))
+                    'entry': clean_entry(m.group(3)),
+                    'day': self.day
                 })
                 continue
 
             print('COULD NOT MATCH: ', value)
             self.errors.append(value)
+
+    def handle_endtag(self, tag):
+        if tag == 'a':
+            self.in_a = False
+
+    def handle_data(self, data):
+        if self.in_a:
+            try:
+                self.day = int(data.strip())
+            except ValueError:
+                pass
 
 
 if __name__ == '__main__':
