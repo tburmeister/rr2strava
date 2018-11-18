@@ -23,6 +23,9 @@ class LogParser(HTMLParser):
     def __init__(self, date):
         super().__init__()
         self.in_a = False
+        self.in_span = False
+        self.in_strong = False
+        self.ok = True
         self.date = date
         self.day = 1
         self.out = []
@@ -37,8 +40,15 @@ class LogParser(HTMLParser):
             self.in_a = True
             return
 
+        if tag == 'strong':
+            self.in_strong = True
+            return
+
         if tag != 'span':
             return
+
+        self.in_span = True
+        self.ok = True
 
         for name, value in attrs:
             if name != 'title':
@@ -72,17 +82,32 @@ class LogParser(HTMLParser):
 
             print('COULD NOT MATCH: ', value)
             self.errors.append(value)
+            self.ok = False
 
     def handle_endtag(self, tag):
         if tag == 'a':
             self.in_a = False
 
+        if tag == 'strong':
+            self.in_strong = False
+
+        if tag == 'span':
+            self.in_span = False
+
     def handle_data(self, data):
+        data = data.strip()
+
         if self.in_a:
             try:
-                self.day = int(data.strip())
+                self.day = int(data)
             except ValueError:
                 pass
+
+        elif self.in_span and self.in_strong and self.ok:
+            if data == 'AM:':
+                self.out[-1]['tod'] = 'AM'
+            elif data == 'PM:':
+                self.out[-1]['tod'] = 'PM'
 
 
 if __name__ == '__main__':
