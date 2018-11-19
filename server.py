@@ -1,7 +1,6 @@
 import atexit
 import json
 import os
-import pickle
 import requests
 
 from concurrent.futures import ThreadPoolExecutor
@@ -70,23 +69,23 @@ def convert(username, month):
             skip_zero += 1
             continue
 
-        if entry['index'] in uploaded:
+        if str(entry['index']) in uploaded:
             skipped.append(entry['title'])
             continue
 
         data = entry_to_strava(entry, month)
         print(json.dumps(data, indent=4))
-        futures.append(executor.submit(do_post, data, session['token']))
+        futures.append(executor.submit(do_post, entry, data, session['token']))
 
     for future in futures:
         try:
-            resp = future.result()
+            entry, resp = future.result()
         except Exception as e:
             errors.append(str(e))
             continue
         
         if resp.ok:
-            uploaded.add(entry['index'])
+            uploaded[str(entry['index'])] = True
             successful += 1
         else:
             errors.append(resp.content.decode())
@@ -103,9 +102,9 @@ def convert(username, month):
     return out
 
 
-def do_post(data, token):
+def do_post(entry, data, token):
     headers = {'Authorization': 'Bearer {}'.format(token)}
-    return requests.post('https://www.strava.com/api/v3/activities', data=data, headers=headers)
+    return entry, requests.post('https://www.strava.com/api/v3/activities', data=data, headers=headers)
 
 
 def entry_to_strava(entry, month):
@@ -133,18 +132,18 @@ def entry_to_strava(entry, month):
 
 
 def load_user_month(username, month):
-    filename = os.path.join('data', '{}-{}.p'.format(username, month))
+    filename = os.path.join('data', '{}-{}.json'.format(username, month))
     if not os.path.exists(filename):
-        return set()
+        return {}
 
-    with open(filename, 'rb') as fp:
-        return pickle.load(fp)
+    with open(filename, 'r') as fp:
+        return json.load(fp)
 
 
 def store_user_month(username, month, uploaded):
-    filename = os.path.join('data', '{}-{}.p'.format(username, month))
-    with open(filename, 'wb') as fp:
-        pickle.dump(uploaded, fp)
+    filename = os.path.join('data', '{}-{}.json'.format(username, month))
+    with open(filename, 'w') as fp:
+        json.dump(uploaded, fp)
 
 
 def shutdown():
