@@ -1,4 +1,6 @@
 import json
+import os
+import pickle
 import requests
 
 from flask import Flask, redirect, request, session, url_for
@@ -53,21 +55,32 @@ def test():
 
 @app.route('/convert/<username>/<month>')
 def convert(username, month):
+    uploaded = load_user_month(username, month)
     entries, errors = parse_month(username, month)
-    out = 'errors: <br>'
+    out = 'skipped: <br>'
 
     for entry in entries:
         if entry['miles'] <= 0:
             continue
 
+        if entry['index'] in uploaded:
+            out += entry['title'] + '<br>'
+
         data = entry_to_strava(entry, month)
         print(json.dumps(data, indent=4))
         headers = {'Authorization': 'Bearer {}'.format(session['token'])}
-        requests.post('https://www.strava.com/api/v3/activities', data=data, headers=headers)
+        resp = requests.post('https://www.strava.com/api/v3/activities', data=data, headers=headers)
+        if resp.ok:
+            uploaded.add(entry['index'])
+        else:
+            out += 'errors: <br>' + resp.content.decode()
+            return out
 
+    out += 'errors: <br>'
     for error in errors:
         out += error + '<br>'
 
+    store_user_month(username, month, uploaded)
     return out
 
 
@@ -93,6 +106,21 @@ def entry_to_strava(entry, month):
         data['elapsed_time'] = int(450 * entry['miles'])
 
     return data
+
+
+def load_user_month(username, month):
+    filename = os.path.join('data', '{}-{}.p'.format(username, month))
+    if not os.path.exists(filename):
+        return set()
+
+    with open(filename, 'rb') as fp:
+        return pickle.load(fp)
+
+
+def store_user_month(username, month, uploaded):
+    filename = os.path.join('data', '{}-{}.p'.format(username, month))
+    with open(filename, 'wb') as fp:
+        pickle.dump(uploaded, fp)
 
 
 if __name__ == '__main__':
