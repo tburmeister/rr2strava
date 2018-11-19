@@ -13,19 +13,24 @@ OUTDIR = 'out'
 URL = 'http://www.runnerunner.com/log.php?username={}&dates={}'
 
 
-def get_month(date):
-    resp = requests.get(URL.format(USERNAME, date))
+def parse_month(username, date):
+    resp = requests.get(URL.format(username, date))
     print('Retrieved log for {}'.format(date))
     parser = LogParser(date)
     parser.feed(resp.content.decode())
     parser.close()
+    return parser.out, parser.errors
+
+
+def get_month(date):
+    entries, errors = parse_month(USERNAME, date)
 
     with open(os.path.join(OUTDIR, '{}.json'.format(date)), 'w') as fp:
-        json.dump(parser.out, fp)
+        json.dump(entries, fp)
 
-    if len(parser.errors) > 0:
+    if len(errors) > 0:
         with open(os.path.join(OUTDIR, 'errors-{}.txt'.format(date)), 'w') as fp:
-            fp.writelines(parser.errors)
+            fp.writelines(errors)
 
     print('Wrote data for {}'.format(date))
 
