@@ -1,13 +1,16 @@
+import atexit
 import json
 import os
 import pickle
 import requests
 
+from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, redirect, request, session, url_for
 from download import parse_month
 
 app = Flask(__name__)
 global config
+global executor
 
 
 @app.route('/')
@@ -57,32 +60,52 @@ def test():
 def convert(username, month):
     uploaded = load_user_month(username, month)
     entries, errors = parse_month(username, month)
-    out = 'skipped: <br>'
+    successful = 0
+    skip_zero = 0
+    skipped = []
+    futures = []
 
     for entry in entries:
         if entry['miles'] <= 0:
+            skip_zero += 1
             continue
 
         if entry['index'] in uploaded:
-            out += entry['title'] + '<br>'
+            skipped.append(entry['title'])
             continue
 
         data = entry_to_strava(entry, month)
         print(json.dumps(data, indent=4))
-        headers = {'Authorization': 'Bearer {}'.format(session['token'])}
-        resp = requests.post('https://www.strava.com/api/v3/activities', data=data, headers=headers)
+        futures.append(executor.submit(do_post, data, session['token']))
+
+    for future in futures:
+        try:
+            resp = future.result()
+        except Exception as e:
+            errors.append(str(e))
+            continue
+        
         if resp.ok:
             uploaded.add(entry['index'])
+            successful += 1
         else:
-            out += 'errors: <br>' + resp.content.decode()
-            return out
+            errors.append(resp.content.decode())
 
+    out = '{} out of {} successful <br>'.format(successful, len(entries) - skip_zero)
+    out += 'skipped: <br>'
+    for title in skipped:
+        out += title + '<br>'
     out += 'errors: <br>'
     for error in errors:
         out += error + '<br>'
 
     store_user_month(username, month, uploaded)
     return out
+
+
+def do_post(data, token):
+    headers = {'Authorization': 'Bearer {}'.format(token)}
+    return requests.post('https://www.strava.com/api/v3/activities', data=data, headers=headers)
 
 
 def entry_to_strava(entry, month):
@@ -124,9 +147,15 @@ def store_user_month(username, month, uploaded):
         pickle.dump(uploaded, fp)
 
 
+def shutdown():
+    executor.shutdown()
+
+
 if __name__ == '__main__':
     with open('config.json') as fp:
         config = json.load(fp)
 
     Flask.secret_key = config['secret_key']
+    executor = ThreadPoolExecutor()
+    atexit.register(shutdown)
     app.run(threaded=True)
