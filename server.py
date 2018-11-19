@@ -65,6 +65,7 @@ def convert(username, month):
 
         if entry['index'] in uploaded:
             out += entry['title'] + '<br>'
+            continue
 
         data = entry_to_strava(entry, month)
         print(json.dumps(data, indent=4))
