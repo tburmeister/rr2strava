@@ -1,11 +1,12 @@
 import atexit
 import json
-import os
 import requests
 
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, redirect, request, session, url_for
 from download import parse_month
+from merv import get_user_report
+from strava import entry_to_strava, load_user_month, store_user_month
 
 app = Flask(__name__)
 global config
@@ -64,6 +65,9 @@ def convert(username, month):
     skipped = []
     futures = []
 
+    if session.get('token') is None:
+        return redirect(url_for('index'))
+
     for entry in entries:
         if entry['miles'] <= 0:
             skip_zero += 1
@@ -102,48 +106,16 @@ def convert(username, month):
     return out
 
 
+@app.route('/merv/<username>')
+def merv(username):
+    resp = get_user_report(username)
+    if not resp.ok:
+        return 'Error: unable to retrieve report for user {}'.format(username)
+
+
 def do_post(entry, data, token):
     headers = {'Authorization': 'Bearer {}'.format(token)}
     return entry, requests.post('https://www.strava.com/api/v3/activities', data=data, headers=headers)
-
-
-def entry_to_strava(entry, month):
-    if session.get('token') is None:
-        redirect(url_for('index'))
-
-    data = {
-        'name': entry['title'],
-        'type': 'run',
-        'elapsed_time': 60 * entry['minutes'],
-        'description': entry['entry'],
-        'distance': 1609.344 * entry['miles']
-    }
-
-    if entry['tod'] == 'AM':
-        data['start_date_local'] = '{}-{}T08:00:00Z'.format(month, entry['day'])
-    else:
-        data['start_date_local'] = '{}-{}T017:00:00Z'.format(month, entry['day'])
-
-    if entry['minutes'] == 0:
-        # Default to 7:30 pace
-        data['elapsed_time'] = int(450 * entry['miles'])
-
-    return data
-
-
-def load_user_month(username, month):
-    filename = os.path.join('data', '{}-{}.json'.format(username, month))
-    if not os.path.exists(filename):
-        return {}
-
-    with open(filename, 'r') as fp:
-        return json.load(fp)
-
-
-def store_user_month(username, month, uploaded):
-    filename = os.path.join('data', '{}-{}.json'.format(username, month))
-    with open(filename, 'w') as fp:
-        json.dump(uploaded, fp)
 
 
 def shutdown():
