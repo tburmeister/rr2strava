@@ -7,6 +7,31 @@ import requests
 from datetime import datetime
 
 
+cache = {}
+
+event_map = {
+    'Run': 'run',
+    'Bike': '',
+    'Swim': ''
+}
+
+workout_map = {
+    '': ''
+}
+
+
+def get_user_cache(name):
+    entries = cache.get(name)
+    if entries is None:
+        resp = get_user_report(name)
+        if not resp.ok:
+            return None
+
+        entries = cache[name] = parse_data(resp.content)
+
+    return entries
+
+
 def get_user_report(name):
     data = {
         'name': name,
@@ -28,7 +53,8 @@ def get_user_report(name):
 
 
 def parse_data(raw):
-    cleaned = re.sub(r'NOW SAVE AS A FILE WITH THE EXTENSION .*', '', raw.decode()).lstrip()
+    cleaned = re.sub(r'NOW SAVE AS A FILE WITH THE EXTENSION .*', '',
+                     raw.decode()).lstrip()
     fp = io.StringIO(cleaned)
     reader = csv.reader(fp, delimiter=',')
     out = []
@@ -61,10 +87,8 @@ def parse_row(row):
      'addendum',
      'note']
     """
-    print(len(row))
     (date,
-     event_type,
-     workout_type,
+     event_type, _,
      distance, _,
      pace, _,
      duration, _, _,
@@ -75,25 +99,20 @@ def parse_row(row):
     time_conversion = 60 if pace and float(pace) > 1 else 3600
     desc = addendum + '\n' + desc if addendum else desc
     desc = desc.replace('    ', '\n\n')
-    date = datetime.strptime('%Y-%m-%d', date).strftime('%Y-%m-%dT12:00:00Z')
+    date = datetime.strptime(date, '%Y-%m-%d').strftime('%Y-%m-%dT12:00:00Z')
 
     return {
         'start_date_local': date,
         'type': convert_event_type(event_type),
-        'workout_type': convert_workout_type(workout_type),
         'distance': 1609.344 * float(distance) if distance else 0,
-        'elapsed_time': time_conversion * float(duration) if duration else 0,
+        'elapsed_time': int(time_conversion * float(duration)) if duration else 0,
         'name': title,
         'description': desc
     }
 
 
 def convert_event_type(event_type):
-    return 'run'
-
-
-def convert_workout_type(workout_type):
-    return None
+    return event_map.get(event_type, 'other')
 
 
 if __name__ == '__main__':

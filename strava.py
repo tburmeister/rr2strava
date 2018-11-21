@@ -23,8 +23,8 @@ def entry_to_strava(entry, month):
     return data
 
 
-def load_user_month(username, month):
-    filename = os.path.join('data', '{}-{}.json'.format(username, month))
+def load_user(username, postfix):
+    filename = os.path.join('data', '{}-{}.json'.format(username, postfix))
     if not os.path.exists(filename):
         return {}
 
@@ -32,7 +32,7 @@ def load_user_month(username, month):
         return json.load(fp)
 
 
-def store_user_month(username, month, uploaded):
-    filename = os.path.join('data', '{}-{}.json'.format(username, month))
+def store_user(username, postfix, uploaded):
+    filename = os.path.join('data', '{}-{}.json'.format(username, postfix))
     with open(filename, 'w') as fp:
         json.dump(uploaded, fp)

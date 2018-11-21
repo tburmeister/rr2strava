@@ -3,14 +3,17 @@ import json
 import requests
 
 from concurrent.futures import ThreadPoolExecutor
-from flask import Flask, redirect, request, session, url_for
+from flask import Flask, make_response, redirect, request, session, url_for
 from download import parse_month
-from merv import get_user_report
-from strava import entry_to_strava, load_user_month, store_user_month
+from merv import get_user_cache
+from strava import entry_to_strava, load_user, store_user
 
 app = Flask(__name__)
 global config
 global executor
+
+
+merv_cache = {}
 
 
 @app.route('/')
@@ -58,7 +61,7 @@ def test():
 
 @app.route('/convert/<username>/<month>')
 def convert(username, month):
-    uploaded = load_user_month(username, month)
+    uploaded = load_user(username, month)
     entries, errors = parse_month(username, month)
     successful = 0
     skip_zero = 0
@@ -102,20 +105,91 @@ def convert(username, month):
     for error in errors:
         out += error + '<br>'
 
-    store_user_month(username, month, uploaded)
+    store_user(username, month, uploaded)
     return out
 
 
-@app.route('/merv/<username>')
-def merv(username):
-    resp = get_user_report(username)
-    if not resp.ok:
+@app.route('/merv/<username>/test')
+def merv_test(username):
+    entries = get_user_cache(username)
+    if entries is None:
         return 'Error: unable to retrieve report for user {}'.format(username)
+
+    entries = entries.copy()
+    for entry in entries:
+        entry['miles'] = '{} mi'.format(entry['distance'] / 1609.344)
+        entry['minutes'] = '{} min'.format(int(entry['elapsed_time'] / 60))
+
+    response = make_response(json.dumps(entries, indent=4))
+    response.headers['Content-Type'] = 'application/json; charset=utf-8'
+    response.headers['mimetype'] = 'application/json'
+    response.status_code = 200
+    return response
+
+
+@app.route('/merv/<username>/all')
+def merv_all(username):
+    return merv(username, None)
+
+
+@app.route('/merv/<username>/<month>')
+def merv(username, month):
+    entries = get_user_cache(username)
+    uploaded = load_user(username, 'merv')
+    attempted = 0
+    successful = 0
+    skipped = []
+    futures = []
+    errors = []
+
+    if entries is None:
+        return 'Error: unable to retrieve report for user {}'.format(username)
+
+    if session.get('token') is None:
+        return redirect(url_for('index'))
+
+    for idx, entry in enumerate(entries):
+        if month is not None and entry['start_date_local'][:7] != month:
+            continue
+
+        if str(idx) in uploaded:
+            skipped.append(entry['name'])
+            continue
+
+        print(json.dumps(entry, indent=4))
+        futures.append(executor.submit(do_post, idx, entry, session['token']))
+        attempted += 1
+
+    for future in futures:
+        try:
+            idx, resp = future.result()
+        except Exception as e:
+            errors.append(str(e))
+            continue
+
+        if resp.ok:
+            uploaded[str(idx)] = True
+            successful += 1
+        else:
+            errors.append(resp.content.decode())
+
+    out = '{} out of {} successful <br>'.format(successful, attempted)
+    out += 'skipped: <br>'
+    for title in skipped:
+        out += title + '<br>'
+    out += 'errors: <br>'
+    for error in errors:
+        out += error + '<br>'
+
+    store_user(username, 'merv', uploaded)
+    return out
 
 
 def do_post(entry, data, token):
     headers = {'Authorization': 'Bearer {}'.format(token)}
-    return entry, requests.post('https://www.strava.com/api/v3/activities', data=data, headers=headers)
+    resp = requests.post('https://www.strava.com/api/v3/activities',
+                         data=data, headers=headers)
+    return entry, resp
 
 
 def shutdown():
