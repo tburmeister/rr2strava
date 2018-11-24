@@ -287,6 +287,6 @@ if __name__ == '__main__':
         config = json.load(fp)
 
     Flask.secret_key = config['secret_key']
-    executor = ThreadPoolExecutor()
+    executor = ThreadPoolExecutor(max_workers=config.get('max_workers', 4))
     atexit.register(shutdown)
     app.run(host='0.0.0.0', threaded=True)
