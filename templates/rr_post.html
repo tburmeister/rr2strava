@@ -10,6 +10,7 @@
 </h1>
 <form action="/rr" method="post">
     <input type="hidden" name="username" value="{{ username }}">
+    <input type="hidden" name="type" value="{{ req_type }}">
     <input type="hidden" name="month" value="{{ month }}">
     <input type="submit" name="submit" value="retry">
     <input type="submit" name="new" value="new request">

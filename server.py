@@ -69,7 +69,8 @@ def test():
         'distance': 100
     }
     headers = {'Authorization': 'Bearer {}'.format(session['token'])}
-    resp = requests.post('https://www.strava.com/api/v3/activities', data=data, headers=headers)
+    resp = requests.post('https://www.strava.com/api/v3/activities',
+                         data=data, headers=headers)
     return resp.content.decode()
 
 
@@ -91,6 +92,7 @@ def rr():
 
 def rr_post():
     username = request.form['username']
+    req_type = request.form['type']
     month = request.form['month']
     uploaded = load_user(username, month)
     entries, errors = parse_month(username, month)
@@ -107,10 +109,29 @@ def rr_post():
         errors.append('month not formatted correctly: must be yyyy-mm')
         return render_template('rr_post.html',
                                username=username,
-                               month=request.form['month'],
+                               req_type=req_type,
+                               month=month,
                                successful=successful,
                                skipped=skipped,
                                errors=errors)
+
+    if req_type == 'test':
+        strava = []
+        for entry in entries:
+            if entry['miles'] <= 0:
+                skip_zero += 1
+                continue
+
+            new = entry_to_strava(entry, month)
+            new['miles'] = '{} mi'.format(entry['miles'])
+            new['minutes'] = '{} min'.format(entry['minutes'])
+            strava.append(new)
+
+        response = make_response(json.dumps(strava, indent=4))
+        response.headers['Content-Type'] = 'application/json; charset=utf-8'
+        response.headers['mimetype'] = 'application/json'
+        response.status_code = 200
+        return response
 
     for entry in entries:
         if entry['miles'] <= 0:
@@ -141,7 +162,8 @@ def rr_post():
     store_user(username, month, uploaded)
     return render_template('rr_post.html',
                            username=username,
-                           month=request.form['month'],
+                           req_type=req_type,
+                           month=month,
                            successful=successful,
                            skipped=skipped,
                            errors=errors)
@@ -184,7 +206,7 @@ def merv_post():
         return render_template('merv_post.html',
                                username=username,
                                req_type=req_type,
-                               month=request.form['month'],
+                               month=month,
                                successful=successful,
                                attempted=attempted,
                                skipped=skipped,
@@ -207,14 +229,14 @@ def merv_post():
         return render_template('merv_post.html',
                                username=username,
                                req_type=req_type,
-                               month=request.form['month'],
+                               month=month,
                                successful=successful,
                                attempted=attempted,
                                skipped=skipped,
                                errors=errors)
 
     for idx, entry in enumerate(entries):
-        if month is not None and entry['start_date_local'][:7] != month:
+        if req_type == 'month' and entry['start_date_local'][:7] != month:
             continue
 
         if str(idx) in uploaded:
@@ -242,7 +264,7 @@ def merv_post():
     return render_template('merv_post.html',
                            username=username,
                            req_type=req_type,
-                           month=request.form['month'],
+                           month=month,
                            successful=successful,
                            attempted=attempted,
                            skipped=skipped,

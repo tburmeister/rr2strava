@@ -15,6 +15,14 @@
     You must do one month at a time.
 </p>
 <p>
+    I strongly recommend that you do a "test" first and confirm that the output
+    returned looks sane. In particular, check that the time in "minutes" and
+    distance in "miles" look right; if something looks wrong, contact me before
+    going forward since you will have to manually edit or delete any entries
+    that are wrong. Note that "distance" is in meters and "elapsed_time" is in
+    seconds.
+</p>
+<p>
     The Strava API has a rate limit of 600 requests per 15 minutes; if you see
     an error about the rate limit having been exceeded, please wait 15 minutes
     and refresh/redo your current request. I am storing successfully uploaded
@@ -29,6 +37,8 @@
 <form action="/rr" method="post">
     Runnerunner username<br>
     <input type="text" name="username"><br>
+    <input type="radio" name="type" value="test" checked>test<br>
+    <input type="radio" name="type" value="month">month<br>
     <input type="text" name="month" value="yyyy-mm"><br>
     <input type="submit" name="submit" value="submit">
     <input type="submit" name="refresh" value="refresh token">
