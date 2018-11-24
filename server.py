@@ -180,7 +180,7 @@ def merv_post():
         return response
 
     if req_type == 'month' and re.match(r'\d\d\d\d-\d\d', month) is None:
-        errors.append('month not formatted correctly')
+        errors.append('month not formatted correctly: must be yyyy-mm')
         return render_template('merv_post.html',
                                username=username,
                                req_type=req_type,
