@@ -1,9 +1,10 @@
 import atexit
 import json
+import re
 import requests
 
 from concurrent.futures import ThreadPoolExecutor
-from flask import Flask, make_response, redirect, request, session, url_for
+from flask import Flask, make_response, redirect, render_template, request, session, url_for
 from download import parse_month
 from merv import get_user_cache
 from strava import entry_to_strava, load_user, store_user
@@ -23,7 +24,12 @@ def index():
                         '&redirect_uri=http://{}/auth&response_type=code'
                         '&scope=activity:write'.format(config['client_id'], config['server_url']))
 
-    return session['token']
+    if session.get('redirect') is not None:
+        goto = session['redirect']
+        del session['redirect']
+        return redirect(goto)
+
+    return 'Your are set to go!'
 
 
 @app.route('/auth')
@@ -41,6 +47,14 @@ def auth():
 @app.route('/clear')
 def clear():
     session.clear()
+    return redirect(url_for('index'))
+
+
+@app.route('/refresh')
+def refresh():
+    if 'token' in session:
+        del session['token']
+
     return redirect(url_for('index'))
 
 
@@ -109,31 +123,27 @@ def convert(username, month):
     return out
 
 
-@app.route('/merv/<username>/test')
-def merv_test(username):
-    entries = get_user_cache(username)
-    if entries is None:
-        return 'Error: unable to retrieve report for user {}'.format(username)
+@app.route('/merv', methods=['GET', 'POST'])
+def merv():
+    if request.method == 'GET':
+        if session.get('token') is None:
+            session['redirect'] = 'merv'
+            return refresh()
 
-    entries = entries.copy()
-    for entry in entries:
-        entry['miles'] = '{} mi'.format(entry['distance'] / 1609.344)
-        entry['minutes'] = '{} min'.format(int(entry['elapsed_time'] / 60))
+        return render_template('merv_get.html')
 
-    response = make_response(json.dumps(entries, indent=4))
-    response.headers['Content-Type'] = 'application/json; charset=utf-8'
-    response.headers['mimetype'] = 'application/json'
-    response.status_code = 200
-    return response
+    if request.form.get('refresh', '') != '':
+        session['redirect'] = 'merv'
+        return refresh()
+
+    return merv_post()
 
 
-@app.route('/merv/<username>/all')
-def merv_all(username):
-    return merv(username, None)
-
-
-@app.route('/merv/<username>/<month>')
-def merv(username, month):
+def merv_post():
+    print(request.form)
+    username = request.form['username']
+    req_type = request.form['type']
+    month = request.form['month']
     entries = get_user_cache(username)
     uploaded = load_user(username, 'merv')
     attempted = 0
@@ -142,11 +152,43 @@ def merv(username, month):
     futures = []
     errors = []
 
-    if entries is None:
-        return 'Error: unable to retrieve report for user {}'.format(username)
-
     if session.get('token') is None:
-        return redirect(url_for('index'))
+        session['redirect'] = 'merv'
+        return refresh()
+
+    if entries is None:
+        errors.append('unable to retrieve report for user {}'.format(username))
+        return render_template('merv_post.html',
+                               username=username,
+                               req_type=req_type,
+                               month=request.form['month'],
+                               successful=successful,
+                               attempted=attempted,
+                               skipped=skipped,
+                               errors=errors)
+
+    if req_type == 'test':
+        entries = entries.copy()
+        for entry in entries:
+            entry['miles'] = '{} mi'.format(entry['distance'] / 1609.344)
+            entry['minutes'] = '{} min'.format(int(entry['elapsed_time'] / 60))
+
+        response = make_response(json.dumps(entries, indent=4))
+        response.headers['Content-Type'] = 'application/json; charset=utf-8'
+        response.headers['mimetype'] = 'application/json'
+        response.status_code = 200
+        return response
+
+    if req_type == 'month' and re.match(r'\d\d\d\d-\d\d', month) is None:
+        errors.append('month not formatted correctly')
+        return render_template('merv_post.html',
+                               username=username,
+                               req_type=req_type,
+                               month=request.form['month'],
+                               successful=successful,
+                               attempted=attempted,
+                               skipped=skipped,
+                               errors=errors)
 
     for idx, entry in enumerate(entries):
         if month is not None and entry['start_date_local'][:7] != month:
@@ -173,16 +215,14 @@ def merv(username, month):
         else:
             errors.append(resp.content.decode())
 
-    out = '{} out of {} successful <br>'.format(successful, attempted)
-    out += 'skipped: <br>'
-    for title in skipped:
-        out += title + '<br>'
-    out += 'errors: <br>'
-    for error in errors:
-        out += error + '<br>'
-
-    store_user(username, 'merv', uploaded)
-    return out
+    return render_template('merv_post.html',
+                           username=username,
+                           req_type=req_type,
+                           month=request.form['month'],
+                           successful=successful,
+                           attempted=attempted,
+                           skipped=skipped,
+                           errors=errors)
 
 
 def do_post(entry, data, token):
@@ -203,4 +243,4 @@ if __name__ == '__main__':
     Flask.secret_key = config['secret_key']
     executor = ThreadPoolExecutor()
     atexit.register(shutdown)
-    app.run(threaded=True)
+    app.run(host='0.0.0.0', threaded=True)
