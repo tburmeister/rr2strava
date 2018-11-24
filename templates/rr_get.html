@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Runnerunner to Strava Conversion</title>
+</head>
+<body>
+<h1>
+    Upload your Runnerunner logs to Strava
+</h1>
+<h2>
+    Instructions for use:
+</h2>
+<p>
+    You must do one month at a time.
+</p>
+<p>
+    The Strava API has a rate limit of 600 requests per 15 minutes; if you see
+    an error about the rate limit having been exceeded, please wait 15 minutes
+    and refresh/redo your current request. I am storing successfully uploaded
+    entries for each user on local disk, so if you redo a request it will skip
+    any previously converted entries.
+</p>
+<p>
+    If you see something like "Authorization Error," that likely means your
+    Strava access token has timed out; click the "refresh token" button and try
+    again.
+</p>
+<form action="/rr" method="post">
+    Runnerunner username<br>
+    <input type="text" name="username"><br>
+    <input type="text" name="month" value="yyyy-mm"><br>
+    <input type="submit" name="submit" value="submit">
+    <input type="submit" name="refresh" value="refresh token">
+</form>
+</body>
+</html>

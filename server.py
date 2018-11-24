@@ -29,7 +29,7 @@ def index():
         del session['redirect']
         return redirect(goto)
 
-    return 'Your are set to go!'
+    return render_template('index.html')
 
 
 @app.route('/auth')
@@ -58,7 +58,7 @@ def refresh():
     return redirect(url_for('index'))
 
 
-@app.route('/test')
+# @app.route('/test')
 def test():
     data = {
         'name': 'test',
@@ -73,8 +73,25 @@ def test():
     return resp.content.decode()
 
 
-@app.route('/convert/<username>/<month>')
-def convert(username, month):
+@app.route('/rr', methods=['GET', 'POST'])
+def rr():
+    if request.method == 'GET' or request.form.get('new', '') != '':
+        if session.get('token') is None:
+            session['redirect'] = 'rr'
+            return refresh()
+
+        return render_template('rr_get.html')
+
+    if request.form.get('refresh', '') != '':
+        session['redirect'] = 'rr'
+        return refresh()
+
+    return rr_post()
+
+
+def rr_post():
+    username = request.form['username']
+    month = request.form['month']
     uploaded = load_user(username, month)
     entries, errors = parse_month(username, month)
     successful = 0
@@ -83,7 +100,17 @@ def convert(username, month):
     futures = []
 
     if session.get('token') is None:
-        return redirect(url_for('index'))
+        session['redirect'] = 'rr'
+        return refresh()
+
+    if re.match(r'\d\d\d\d-\d\d', month) is None:
+        errors.append('month not formatted correctly: must be yyyy-mm')
+        return render_template('rr_post.html',
+                               username=username,
+                               month=request.form['month'],
+                               successful=successful,
+                               skipped=skipped,
+                               errors=errors)
 
     for entry in entries:
         if entry['miles'] <= 0:
@@ -111,21 +138,17 @@ def convert(username, month):
         else:
             errors.append(resp.content.decode())
 
-    out = '{} out of {} successful <br>'.format(successful, len(entries) - skip_zero)
-    out += 'skipped: <br>'
-    for title in skipped:
-        out += title + '<br>'
-    out += 'errors: <br>'
-    for error in errors:
-        out += error + '<br>'
-
-    store_user(username, month, uploaded)
-    return out
+    return render_template('rr_post.html',
+                           username=username,
+                           month=request.form['month'],
+                           successful=successful,
+                           skipped=skipped,
+                           errors=errors)
 
 
 @app.route('/merv', methods=['GET', 'POST'])
 def merv():
-    if request.method == 'GET':
+    if request.method == 'GET' or request.form.get('new', '') != '':
         if session.get('token') is None:
             session['redirect'] = 'merv'
             return refresh()
@@ -140,7 +163,6 @@ def merv():
 
 
 def merv_post():
-    print(request.form)
     username = request.form['username']
     req_type = request.form['type']
     month = request.form['month']
