@@ -138,6 +138,7 @@ def rr_post():
         else:
             errors.append(resp.content.decode())
 
+    store_user(username, month, uploaded)
     return render_template('rr_post.html',
                            username=username,
                            month=request.form['month'],
@@ -237,6 +238,7 @@ def merv_post():
         else:
             errors.append(resp.content.decode())
 
+    store_user(username, 'merv', uploaded)
     return render_template('merv_post.html',
                            username=username,
                            req_type=req_type,
