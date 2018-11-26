@@ -53,8 +53,12 @@ def get_user_report(name):
 
 
 def parse_data(raw):
-    cleaned = re.sub(r'NOW SAVE AS A FILE WITH THE EXTENSION .*', '',
-                     raw.decode()).lstrip()
+    try:
+        decoded = raw.decode()
+    except UnicodeDecodeError:
+        decoded = raw.decode(encoding='latin1')
+
+    cleaned = re.sub(r'NOW SAVE AS A FILE WITH THE EXTENSION .*', '', decoded).lstrip()
     fp = io.StringIO(cleaned)
     reader = csv.reader(fp, delimiter=',')
     out = []
